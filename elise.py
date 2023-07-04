@@ -5,32 +5,52 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
-# Define the MLP architecture for each model
-class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(MLP, self).__init__()
+# Define the MLP architecture for each network
+class Network1(nn.Module):
+    def __init__(self, input_dim, hidden_dim):
+        super(Network1, self).__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
-        self.dropout = nn.Dropout(0.2)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
 
     def forward(self, x):
         x = nn.functional.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
+        x = nn.functional.relu(self.fc2(x))
         return x
 
-# Define the overall model
-class LegalAIDefender(nn.Module):
-    def __init__(self, mlp1, mlp2, mlp3):
-        super(LegalAIDefender, self).__init__()
-        self.mlp1 = mlp1
-        self.mlp2 = mlp2
-        self.mlp3 = mlp3
+class Network2(nn.Module):
+    def __init__(self, hidden_dim, output_dim):
+        super(Network2, self).__init__()
+        self.fc1 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
-        x = self.mlp1(x)
-        x = self.mlp2(x)
-        x = self.mlp3(x)
+        x = nn.functional.relu(self.fc1(x))
+        x = nn.functional.relu(self.fc2(x))
+        return x
+
+class Network3(nn.Module):
+    def __init__(self, hidden_dim, output_dim):
+        super(Network3, self).__init__()
+        self.fc1 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        x = nn.functional.relu(self.fc1(x))
+        x = nn.functional.relu(self.fc2(x))
+        return x
+
+# Define the overall model with three networks
+class LegalAIDefender(nn.Module):
+    def __init__(self, network1, network2, network3):
+        super(LegalAIDefender, self).__init__()
+        self.network1 = network1
+        self.network2 = network2
+        self.network3 = network3
+
+    def forward(self, x):
+        x = self.network1(x)
+        x = self.network2(x)
+        x = self.network3(x)
         return x
 
 # Prepare your data
@@ -56,13 +76,13 @@ input_dim = train_tensor.shape[1]
 hidden_dim = 100
 output_dim = 2  # assuming binary classification
 
-# Instantiate the MLP models
-mlp1 = MLP(input_dim, hidden_dim, hidden_dim)
-mlp2 = MLP(hidden_dim, hidden_dim, hidden_dim)
-mlp3 = MLP(hidden_dim, hidden_dim, output_dim)
+# Instantiate the networks
+network1 = Network1(input_dim, hidden_dim)
+network2 = Network2(hidden_dim, hidden_dim)
+network3 = Network3(hidden_dim, output_dim)
 
-# Combine the MLPs into a full model
-full_model = LegalAIDefender(mlp1, mlp2, mlp3)
+# Combine the networks into a full model
+full_model = LegalAIDefender(network1, network2, network3)
 
 # Set up the training parameters
 learning_rate = 0.001
@@ -105,6 +125,6 @@ print(f"Validation Accuracy: {val_accuracy:.4f}")
 torch.save(full_model.state_dict(), "legal_ai_model.pth")
 
 # Load the saved model
-loaded_model = LegalAIDefender(mlp1, mlp2, mlp3)
+loaded_model = LegalAIDefender(network1, network2, network3)
 loaded_model.load_state_dict(torch.load("legal_ai_model.pth"))
 loaded_model.eval()
