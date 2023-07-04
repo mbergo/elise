@@ -1,74 +1,110 @@
-import numpy as np
+import torch
+from torch import nn, optim
+from torch.utils.data import DataLoader, random_split
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, BatchNormalization
-from keras.regularizers import l1_l2
-from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
-from keras.optimizers import Adam
+from sklearn.metrics import accuracy_score
 
-# Here are some fake data for the sake of the example
-# You should replace these with your real data
-n_samples = 1000
-n_features = 10
-X = np.random.normal(size=(n_samples, n_features))
-y = np.random.choice([0, 1], size=n_samples)
+# Define the MLP architecture for each model
+class MLP(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(MLP, self).__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+        self.dropout = nn.Dropout(0.2)
 
-# Preprocessing: split the data into training, validation, and test sets
-X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.25, random_state=42)
+    def forward(self, x):
+        x = nn.functional.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
 
-def create_model(input_shape):
-    model = Sequential()
+# Define the overall model
+class LegalAIDefender(nn.Module):
+    def __init__(self, mlp1, mlp2, mlp3):
+        super(LegalAIDefender, self).__init__()
+        self.mlp1 = mlp1
+        self.mlp2 = mlp2
+        self.mlp3 = mlp3
 
-    # First neural network
-    model.add(Dense(128, activation='relu', input_shape=input_shape,
-                    kernel_regularizer=l1_l2(l1=0.01, l2=0.01)))  # L1 and L2 regularization
-    model.add(Dropout(0.5))
-    model.add(BatchNormalization())  # Batch normalization
-    model.add(Dense(64, activation='relu',
-                    kernel_regularizer=l1_l2(l1=0.01, l2=0.01)))  # L1 and L2 regularization
-    model.add(Dense(10, activation='relu'))
+    def forward(self, x):
+        x = self.mlp1(x)
+        x = self.mlp2(x)
+        x = self.mlp3(x)
+        return x
 
-    # Second neural network
-    model.add(Dense(128, activation='relu',
-                    kernel_regularizer=l1_l2(l1=0.01, l2=0.01)))  # L1 and L2 regularization
-    model.add(Dropout(0.5))
-    model.add(BatchNormalization())  # Batch normalization
-    model.add(Dense(64, activation='relu',
-                    kernel_regularizer=l1_l2(l1=0.01, l2=0.01)))  # L1 and L2 regularization
-    model.add(Dense(10, activation='relu'))
+# Prepare your data
+texts = [...]  # List of text data
+labels = [...]  # List of corresponding labels
 
-    # Third neural network
-    model.add(Dense(128, activation='relu',
-                    kernel_regularizer=l1_l2(l1=0.01, l2=0.01)))  # L1 and L2 regularization
-    model.add(Dropout(0.5))
-    model.add(BatchNormalization())  # Batch normalization
-    model.add(Dense(64, activation='relu',
-                    kernel_regularizer=l1_l2(l1=0.01, l2=0.01)))  # L1 and L2 regularization
-    model.add(Dense(1, activation='sigmoid'))
+# Split the data into training and validation sets
+train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2, random_state=42)
 
-    return model
+# Vectorize the text data
+vectorizer = CountVectorizer()
+train_features = vectorizer.fit_transform(train_texts)
+val_features = vectorizer.transform(val_texts)
 
-model = create_model((n_features,))  # 10 features
+# Convert data to tensors
+train_tensor = torch.Tensor(train_features.toarray())
+val_tensor = torch.Tensor(val_features.toarray())
+train_labels_tensor = torch.LongTensor(train_labels)
+val_labels_tensor = torch.LongTensor(val_labels)
 
-# Define the optimizer
-optimizer = Adam(learning_rate=0.001)
+# Define the dimensions
+input_dim = train_tensor.shape[1]
+hidden_dim = 100
+output_dim = 2  # assuming binary classification
 
-# Compile the model
-model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+# Instantiate the MLP models
+mlp1 = MLP(input_dim, hidden_dim, hidden_dim)
+mlp2 = MLP(hidden_dim, hidden_dim, hidden_dim)
+mlp3 = MLP(hidden_dim, hidden_dim, output_dim)
 
-# Define the callbacks
-callbacks = [
-    ModelCheckpoint('best_model.h5', save_best_only=True, monitor='val_loss'),
-    EarlyStopping(monitor='val_loss', patience=10),
-    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5)
-]
+# Combine the MLPs into a full model
+full_model = LegalAIDefender(mlp1, mlp2, mlp3)
 
-# Fit the model
-history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=100, batch_size=32, callbacks=callbacks)
+# Set up the training parameters
+learning_rate = 0.001
+batch_size = 32
+epochs = 10
 
-# Evaluate the model on the test set
-test_loss, test_acc = model.evaluate(X_test, y_test)
+# Define the loss function and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(full_model.parameters(), lr=learning_rate)
 
-print(f"Test Loss: {test_loss}")
-print(f"Test Accuracy: {test_acc}")
+# Prepare the data loaders
+train_dataset = torch.utils.data.TensorDataset(train_tensor, train_labels_tensor)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+# Training loop
+for epoch in range(epochs):
+    full_model.train()
+    running_loss = 0.0
+    for inputs, labels in train_loader:
+        optimizer.zero_grad()
+
+        outputs = full_model(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+
+    print(f"Epoch {epoch+1}: Loss: {running_loss/len(train_loader):.4f}")
+
+# Evaluation
+full_model.eval()
+val_outputs = full_model(val_tensor)
+val_predictions = torch.argmax(val_outputs, dim=1)
+val_accuracy = accuracy_score(val_labels, val_predictions.tolist())
+
+print(f"Validation Accuracy: {val_accuracy:.4f}")
+
+# Save the model
+torch.save(full_model.state_dict(), "legal_ai_model.pth")
+
+# Load the saved model
+loaded_model = LegalAIDefender(mlp1, mlp2, mlp3)
+loaded_model.load_state_dict(torch.load("legal_ai_model.pth"))
+loaded_model.eval()
